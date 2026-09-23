@@ -731,6 +731,11 @@ using DelimitedFiles: readdlm
             end
         end
     end
+
+    @testset "Π(n; φ, m) with m > n > 1" begin
+        # reference: Arb, 1.0990711405668268
+        @test alg.Pi(1.3, 0.7, 1.5) ≈ 1.0990711405668268 rtol = 1e-14
+    end
 end
 
 

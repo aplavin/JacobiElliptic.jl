@@ -39,6 +39,14 @@
             @test Array(e_gpu) ≈ E.(ms)
             @test Array(f_gpu) ≈ F.(us, 0.5f0)
             @test Array(pi_gpu) ≈ Pi.(0.2f0, us, 0.5f0)
+
+            # n > 1 uses a parameter transformation; its inner evaluation must
+            # remain nonrecursive so it can run in a Metal kernel.
+            n_gt_one = 1.0000001f0
+            φ_gt_one = 1.6302493f0
+            m_gt_one = 0.9919553f0
+            pi_gt_one_gpu = Pi.(Metal.MtlArray(Float32[n_gt_one]), φ_gt_one, m_gt_one)
+            @test only(Array(pi_gt_one_gpu)) ≈ Pi(n_gt_one, φ_gt_one, m_gt_one) rtol=1e-4
         end
 
         @testset "Jacobi API" begin

@@ -238,6 +238,15 @@ E(m) = ellipke(m)[2]
     return T(NaN)
 end
 
+@inline function _Pi_n_le_one(n::A, φ::B, m::C) where {A,B,C}
+    T = promote_type(A, B, C)
+    if 2abs(φ) > T(π)
+        phi2 = φ + T(π / 2)
+        return 2fld(phi2, T(π)) * Pi(n, m) - _Pi(n, cos(mod(phi2, T(π))), m)
+    end
+    return _Pi(n, sin(φ), m)
+end
+
 """
 ``\\Pi (n;\\varphi \\,|\\,m)=\\int _{0}^{\\sin \\varphi }{\\frac {1}{1-nt^{2}}}{\\frac {dt}{\\sqrt {\\left(1-mt^{2}\\right)\\left(1-t^{2}\\right)}}}.``
 
@@ -272,23 +281,9 @@ function Pi(n::A, φ::B, m::C) where {A,B,C}
         t1 = sinφ / (cosφ * _sqrt(muladd(-m, sinφ2, oneT)))
         h1 = nc * (n−m) / n
         n1 = m / n
-        return (FukushimaT(t1, h1) - Pi(n1, φ, m) + F(φ, m))
+        return (FukushimaT(t1, h1) - _Pi_n_le_one(n1, φ, m) + F(φ, m))
     end
-    if 2abs(φ) > T(π)
-        #j = floor(φ/T(π))
-        #phi2= φ - j*T(π)
-        #signφ = sign(phi2)
-        #if abs(phi2) > T(π/2)
-        #    j += signφ*one(T)
-        #    phi2= phi2 - signφ*T(π)
-        #end
-        #signφ = sign(phi2)
-        phi2 = φ + T(π / 2)
-        return 2fld(phi2, T(π)) * Pi(n, m) - _Pi(n, cos(mod(phi2, T(π))), m)
-        #return 2j * Pi(n, m) - signφ*Pi(n, abs(phi2), m)
-    end
-
-    return _Pi(n, sin(φ), m)
+    return _Pi_n_le_one(n, φ, m)
 end
 
 #https://doi.org/T(10).1016/j.cam.2011.1107

@@ -19,12 +19,10 @@ function _isequals(A, B)
 end
 
 # assumes 0 ≤ m ≤ 1
-@inline function rawF(sinphi::A, m::B) where {A,B}
+@inline function rawF(sinphi::A, cosphi2::A, m::B) where {A,B}
     T = promote_type(A, B)
-    _isequals(abs(sinphi), 1) && _isequals(m, 1) && return sign(sinphi) * T(Inf)
     oneT = _one(T)
-    sinphi2 = sinphi * sinphi
-    drf, ierr = DRF(oneT - sinphi2, muladd(-m, sinphi2, oneT), oneT)
+    drf, ierr = DRF(cosphi2, muladd(m, cosphi2, oneT - m), oneT)
     ierr == 0 || return T(NaN)
     sinphi * drf
 end
@@ -34,12 +32,15 @@ end
 
     (isnan(phi) || isnan(m)) && return T(NaN)
     #(m < 0 || m > 1) && throw(DomainError(m, "argument m not in [0,1]"))
+    _isequals(m, 1) && _isequals(phi, T(π / 2)) && return T(Inf)
     if abs(phi) > T(π / 2)
         # Abramowitz & Stegun (17.4.3)
         phi2 = phi + T(π / 2)
-        return 2 * fld(phi2, T(π)) * K(m) - rawF(cos(mod(phi2, T(π))), m)
+        s, c = sincos(mod(phi2, T(π)))
+        return 2 * fld(phi2, T(π)) * K(m) - rawF(c, s^2, m)
     end
-    return rawF(sin(phi), m)
+    sinphi, cosphi = sincos(phi)
+    return rawF(sinphi, cosphi^2, m)
 end
 
 """

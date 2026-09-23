@@ -738,6 +738,17 @@ using DelimitedFiles: readdlm
     end
 end
 
+@testset "Carlson F near π/2 in Float32" begin
+    m = 0.9919552f0
+    for φ in (1.5703955f0, 1.5711972f0, -1.5703955f0)
+        reference = JacobiElliptic.CarlsonAlg.F(Float64(φ), Float64(m))
+        @test JacobiElliptic.CarlsonAlg.F(φ, m) ≈ reference rtol=5e-6
+    end
+    φ = 1.5703955f0
+    @test JacobiElliptic.CarlsonAlg.F(φ, 1f0) ≈
+          JacobiElliptic.CarlsonAlg.F(Float64(φ), 1.0) rtol=5e-6
+    @test JacobiElliptic.CarlsonAlg.F(Float32(π / 2), 1f0) == Inf32
+end
 
 alg = JacobiElliptic.ArithmeticGeometricMeanAlg
 # Seperate tests for Arithmetic-Geometric Mean implementations

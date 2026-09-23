@@ -40,6 +40,16 @@
             @test Array(f_gpu) ≈ F.(us, 0.5f0)
             @test Array(pi_gpu) ≈ Pi.(0.2f0, us, 0.5f0)
 
+            φ_near_half_pi = 1.5703955f0
+            m_near_one = 0.9919552f0
+            f_near_gpu = F.(Metal.MtlArray(Float32[φ_near_half_pi]), m_near_one)
+            f_near_reference = F(Float64(φ_near_half_pi), Float64(m_near_one))
+            @test only(Array(f_near_gpu)) ≈ f_near_reference rtol=5e-6
+            f_unit_gpu = F.(Metal.MtlArray(Float32[φ_near_half_pi]), 1f0)
+            @test only(Array(f_unit_gpu)) ≈ F(Float64(φ_near_half_pi), 1.0) rtol=5e-6
+            f_endpoint_gpu = F.(Metal.MtlArray([Float32(π / 2)]), 1f0)
+            @test only(Array(f_endpoint_gpu)) == Inf32
+
             # n > 1 uses a parameter transformation; its inner evaluation must
             # remain nonrecursive so it can run in a Metal kernel.
             n_gt_one = 1.0000001f0

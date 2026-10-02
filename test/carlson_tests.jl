@@ -750,6 +750,35 @@ end
     @test JacobiElliptic.CarlsonAlg.F(Float32(π / 2), 1f0) == Inf32
 end
 
+@testset "Batched DRJ(X, Y, Z, Ps::NTuple)" begin
+    DRJ = JacobiElliptic.CarlsonAlg.DRJ
+    # valid input: ≡ map of the scalar method; invalid: the scalar error code with a NaN value
+    scalar_map(X, Y, Z, Ps) = map(P -> ((v, e) = DRJ(X, Y, Z, P); (iszero(e) ? v : oftype(v, NaN), e)), Ps)
+    batched_eq_scalar(X, Y, Z, Ps) = isequal(DRJ(X, Y, Z, Ps), scalar_map(X, Y, Z, Ps))
+    for T in (Float64, Float32)
+        # realistic Carlson-form inputs: X = cos²φ, Y = 1 - m sin²φ, Z = 1, P = 1 - n sin²φ
+        inputs = map(1:20_000) do i
+            φ = T(π / 2) * T(i / 20_001)
+            m = T(mod(0.618i, 1.0)); s2 = sin(φ)^2
+            ns = (T(mod(0.37i, 1.0)), T(mod(0.73i, 1.0)) - 3, 1 - T(10)^T(-mod(0.11i, 7.0)), T(mod(0.51i, 1.0)))
+            (cos(φ)^2, 1 - m * s2, one(T), map(n -> 1 - n * s2, ns))
+        end
+        for N in 1:4
+            @test all(((X, Y, Z, P),) -> DRJ(X, Y, Z, P[1:N]) === map(p -> DRJ(X, Y, Z, p), P[1:N]), inputs)
+        end
+        # per-P error codes and edge cases
+        for (X, Y, Z, Ps) in ((0, 0, 1, (0.5, 1e-300, -1)), (-1, 0.5, 1, (0.5, 0.6)), (1e300, 0.5, 1, (0.5,)),
+                              (0.3, 0.5, 1, (1e300, 0.6, 1e-40)), (0, 1, 1, (1, 1, 1)), (1, 1, 1, (1, 1e-10, 1e10)))
+            @test batched_eq_scalar(T(X), T(Y), T(Z), T.(Ps))
+        end
+        @test isequal(DRJ(T(0.3), T(0.5), one(T), (T(-1), T(0.4))), ((T(NaN), 2), DRJ(T(0.3), T(0.5), one(T), T(0.4))))
+        @test DRJ(T(0.3), T(0.5), one(T), ()) === ()
+        @inferred DRJ(T(0.3), T(0.5), one(T), (T(0.2), T(0.4), T(0.6)))
+        f(X, Y, Z, Ps) = (DRJ(X, Y, Z, Ps); @allocated DRJ(X, Y, Z, Ps))
+        @test f(T(0.3), T(0.5), one(T), (T(0.2), T(0.4), T(0.6))) == 0
+    end
+end
+
 alg = JacobiElliptic.ArithmeticGeometricMeanAlg
 # Seperate tests for Arithmetic-Geometric Mean implementations
 @testset "Table 17.2: alg.K(α) and alg.E(α)" begin

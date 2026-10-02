@@ -90,5 +90,15 @@
             @test Array(carlson_f_gpu) ≈ F.(Ref(Carlson()), us, 0.5f0)
             @test Array(fukushima_sn_gpu) ≈ sn.(Ref(Fukushima()), us, 0.5f0)
         end
+
+        @testset "Batched DRJ" begin
+            drj3(x, y, p) = map(first, JacobiElliptic.CarlsonAlg.DRJ(x, y, 1f0, (p, p / 2, 2p)))
+            xs = Float32[0.0, 0.2, 0.7, 1.0]
+            ys = Float32[0.3, 0.9, 0.5, 1.0]
+            ps = Float32[0.1, 0.6, 0.9, 1.0]
+            r_gpu = drj3.(Metal.MtlArray(xs), Metal.MtlArray(ys), Metal.MtlArray(ps))
+            @test r_gpu isa Metal.MtlArray
+            @test all(map((a, b) -> all(map(≈, a, b)), Array(r_gpu), drj3.(xs, ys, ps)))
+        end
     end
 end

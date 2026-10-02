@@ -337,6 +337,115 @@ function DRJ(X::A, Y::B, Z::C, P::D) where {A,B,C,D}
     return (ans, IER)
 end
 
+"""
+    DRJ(X, Y, Z, Ps::NTuple{N}) -> NTuple{N, Tuple{T, Int}}
+
+Batched Carlson `RJ` for several `P` sharing the same `(X, Y, Z)`. For valid input each element is
+bit-identical to the scalar `DRJ(X, Y, Z, P)`, but the shared `(X, Y, Z)` duplication step (three
+square roots, `LAMDA`) runs once per iteration for all `P`. Each `P` stops iterating at its own
+convergence. Invalid input gives `(NaN, ier)` for the affected `P`, with the scalar method's error
+code `ier`. Unrolled over `N`, allocation-free, GPU-compatible.
+"""
+@inline DRJ(X, Y, Z, ::Tuple{}) = ()
+@inline function DRJ(X::A, Y::B, Z::C, Ps::NTuple{N,D}) where {A,B,C,D,N}
+    T = promote_type(A, B, C, D)
+
+    ERRTOL = (eps(T) / 6)^T(1 / 6)
+    LOLIM = (5floatmin(T))^T(1 / 3)
+    UPLIM = T(3 / 10) * (floatmax(T) / 5)^T(1 / 3)
+    twoT = T(2)
+    inv4 = T(1 / 4)
+    inv5 = T(1 / 5)
+
+    C1 = T(3 / 14)
+    C2 = T(1 / 3)
+    C3 = T(3 / 22)
+    C4 = T(3 / 26)
+
+    XN = T(X)
+    YN = T(Y)
+    ZN = T(Z)
+    # closures below use `z` instead of capturing `T`: a captured DataType defeats inference
+    z = zero(T)
+
+    # Error codes of the scalar DRJ, per P; an invalid P is frozen from the start and returns NaN.
+    # Inside the valid region DRC never errors (the SLATEC bounds are chosen for that).
+    neg = min(XN, YN, ZN) < z
+    maxXYZ = max(XN, YN, ZN)
+    minsum = min(XN + YN, XN + ZN, YN + ZN)
+    ier = map(Ps) do P
+        PT = oftype(z, P)
+        ifelse(neg, 1, ifelse(max(maxXYZ, PT) > UPLIM, 3, ifelse(min(minsum, PT) < LOLIM, 2, 0)))
+    end
+
+    # Per-P state (all-float, so it stays in registers). A converged P is frozen, `done`.
+    st = map(P -> (PN=oftype(z, P), SIGMA=z, MU=z, XNDEV=z, YNDEV=z, ZNDEV=z, PNDEV=z, POWER4=z), Ps)
+    done = map(!iszero, ier)
+    POWER4 = one(T)
+
+    while true
+        XNYNZN = XN + YN + ZN
+        # `let`: closures must not capture the loop-reassigned XN/YN/ZN/POWER4 (they would be boxed);
+        # in-body `@inline`: without it the closures are not inlined for N ≥ 2 (stack copies, ~2x slower)
+        st_done = let XN = XN, YN = YN, ZN = ZN, XNYNZN = XNYNZN, POWER4 = POWER4
+            map(st, done) do s, d
+                @inline
+                d && return (s, d)
+                MU = (XNYNZN + twoT * s.PN) * inv5
+                invMU = inv(MU)
+                XNDEV = (MU - XN) * invMU
+                YNDEV = (MU - YN) * invMU
+                ZNDEV = (MU - ZN) * invMU
+                PNDEV = (MU - s.PN) * invMU
+                EPSLON = max(abs(XNDEV), abs(YNDEV), abs(ZNDEV), abs(PNDEV))
+                # `!(≥)` rather than `<`: a NaN input terminates (→ NaN) instead of looping forever
+                ((; s..., MU, XNDEV, YNDEV, ZNDEV, PNDEV, POWER4), !(EPSLON >= ERRTOL))
+            end
+        end
+        st = map(first, st_done)
+        done = map(last, st_done)
+        all(done) && break
+
+        XNROOT = _sqrt(XN)
+        YNROOT = _sqrt(YN)
+        ZNROOT = _sqrt(ZN)
+        YNROOTZNROOT = YNROOT * ZNROOT
+        rootsum = XNROOT + YNROOT + ZNROOT
+        LAMDA = muladd(XNROOT, (YNROOT + ZNROOT), YNROOTZNROOT)
+        st = let LAMDA = LAMDA, POWER4 = POWER4
+            map(st, done) do s, d
+                @inline
+                d && return s
+                pn_plus_lamda = s.PN + LAMDA
+                alpha_base = muladd(s.PN, rootsum, XNROOT * YNROOTZNROOT)
+                ALFA = alpha_base * alpha_base
+                BETA = s.PN * pn_plus_lamda * pn_plus_lamda
+                drc, _ = DRC(ALFA, BETA)
+                (; s..., SIGMA=muladd(POWER4, drc, s.SIGMA), PN=pn_plus_lamda * inv4)
+            end
+        end
+        POWER4 *= inv4
+        XN = (XN + LAMDA) * inv4
+        YN = (YN + LAMDA) * inv4
+        ZN = (ZN + LAMDA) * inv4
+    end
+
+    return map(st, ier) do s, e
+        @inline
+        (; MU, XNDEV, YNDEV, ZNDEV, PNDEV, SIGMA) = s
+        YNDEVZNDEV = YNDEV * ZNDEV
+        EA = muladd(XNDEV, (YNDEV + ZNDEV), YNDEVZNDEV)
+        EB = XNDEV * YNDEVZNDEV
+        EC = PNDEV * PNDEV
+        E2 = EA - 3 * EC
+        E3 = EB + 2 * PNDEV * (EA - EC)
+        S1 = 1 + E2 * (-C1 + 3C3 / 4 * E2 - 3C4 / 2 * E3)
+        S2 = EB * (C2 / 2 + PNDEV * (-C3 - C3 + PNDEV * C4))
+        S3 = PNDEV * EA * (C2 - PNDEV * C3) - C2 * PNDEV * EC
+        (ifelse(iszero(e), 3SIGMA + s.POWER4 * (S1 + S2 + S3) / (MU * _sqrt(MU)), oftype(z, NaN)), e)
+    end
+end
+
 @inline function DRFJ(X::A, Y::B, Z::C, P::D) where {A,B,C,D}
     T = promote_type(A, B, C, D)
 

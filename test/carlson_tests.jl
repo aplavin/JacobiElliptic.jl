@@ -779,6 +779,39 @@ end
     end
 end
 
+@testset "NaN/Inf inputs terminate" begin
+    C = JacobiElliptic.CarlsonAlg
+    FA = JacobiElliptic.FukushimaAlg
+    for T in (Float64, Float32)
+        x, h, n = T(0.5), T(0.3), T(NaN)
+        # NaN in any one argument -> NaN value (error code 0: NaN passes the domain checks)
+        withnan(args, i) = Base.setindex(args, n, i)
+        for (f, args) in ((C.DRF, (x, h, one(T))), (C.DRD, (x, h, one(T))), (C.DRC, (x, h)), (C.DRJ, (x, h, one(T), x)))
+            @test all(i -> (r = f(withnan(args, i)...); isnan(r[1]) && r[2] == 0), eachindex(args))
+        end
+        @test all(i -> all(isnan, C.DRFJ(withnan((x, h, one(T), x), i)...)[[1, 3]]), 1:3)
+        @test isequal(C.DRFJ(x, h, one(T), n), (C.DRF(x, h, one(T))..., n, 0))
+        @test all(isnan ∘ first, C.DRJ(n, h, one(T), (x, T(0.4))))
+        @test isequal(C.DRJ(x, h, one(T), (n, T(0.4))), map(P -> C.DRJ(x, h, one(T), P), (n, T(0.4))))
+        # every Carlson argument NaN (Krang's spin-0 pixel)
+        @test isequal(C.DRF(n, n, one(T)), (n, 0)) && isequal(C.DRJ(n, n, one(T), n), (n, 0))
+
+        for (f, args) in ((K, (h,)), (E, (h,)), (C.K, (h,)), (C.E, (h,)), (C.ellipke, (h,)), (F, (x, h)), (E, (x, h)),
+                          (Pi, (h, x, h)), (Pi, (h, h)), (J, (h, x, h)), (J, (h, h)), (C.cel, (h, x, one(T), one(T))),
+                          (am, (x, h)), (ellipj, (x, h)), (ellipj, (x, T(0.9))), (ellipj, (x, T(-2))), (ellipj, (x, T(3))),
+                          (sn, (x, h)), (cn, (x, h)), (dn, (x, h)), (sc, (x, h)), (cs, (x, h)), (JacobiElliptic.cd, (x, h)),
+                          (FA.sn, (x, h)), (FA.cn, (x, h)), (FA.dn, (x, h)), (FA.sc, (x, h)), (FA.sd, (x, h)),
+                          (FA.K, (h,)), (FA.E, (h,)), (FA.F, (x, h)), (FA.E, (x, h)), (FA.Pi, (h, x, h)), (FA.J, (h, x, h)))
+            @test all(i -> all(isnan, f(withnan(args, i)...)), eachindex(args))
+        end
+
+        # Inf argument: no limit exists, NaN
+        @test isnan(F(T(Inf), h)) && isnan(F(-T(Inf), h)) && isnan(E(T(Inf), h)) && isnan(E(x, T(Inf)))
+        @test all(f -> isnan(f(-T(Inf), -T(Inf))), (FA.sn, FA.cn, FA.dn, FA.sc, FA.sd))
+    end
+    @test JacobiElliptic.CarlsonAlg.DRC(-0.5, 1.0) == (0.0, 1)  # X < 0 is a domain error
+end
+
 alg = JacobiElliptic.ArithmeticGeometricMeanAlg
 # Seperate tests for Arithmetic-Geometric Mean implementations
 @testset "Table 17.2: alg.K(α) and alg.E(α)" begin

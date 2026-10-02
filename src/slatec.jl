@@ -61,7 +61,7 @@ export DRC, DRD, DRF, DRJ
         YNDEV = muladd(ninvMU, (MU + YN), 2)
         ZNDEV = muladd(ninvMU, (MU + ZN), 2)
         EPSLON = max(abs(XNDEV), abs(YNDEV), abs(ZNDEV))
-        (EPSLON < ERRTOL) && break
+        !(EPSLON >= ERRTOL) && break  # `!(≥)` rather than `<`: a NaN input terminates (→ NaN)
         XNROOT = _sqrt(XN)
         YNROOT = _sqrt(YN)
         ZNROOT = _sqrt(ZN)
@@ -146,7 +146,7 @@ end
         YNDEV = (MU - YN) * invMU
         ZNDEV = (MU - ZN) * invMU
         EPSLON = max(abs(XNDEV), abs(YNDEV), abs(ZNDEV))
-        (EPSLON < ERRTOL) && break
+        !(EPSLON >= ERRTOL) && break  # NaN-terminating, as in DRF
         XNROOT = _sqrt(XN)
         YNROOT = _sqrt(YN)
         ZNROOT = _sqrt(ZN)
@@ -211,7 +211,7 @@ end
 
     ans = zero(T)
 
-    X < zero(T) || Y <= zero(T) && return (ans, 1)
+    (X < zero(T) || Y <= zero(T)) && return (ans, 1)
     max(X, Y) > UPLIM && return (ans, 3)
     X + Y < LOLIM && return (ans, 2)
 
@@ -224,7 +224,7 @@ end
         MU = (XN + YN + YN) * inv3
         invMU = inv(MU)
         SN = muladd(invMU, YN + MU, -twoT)
-        abs(SN) < ERRTOL && break
+        !(abs(SN) >= ERRTOL) && break  # NaN-terminating, as in DRF
         LAMDA = muladd(twoT * _sqrt(XN), _sqrt(YN), YN)
         XN = (XN + LAMDA) * inv4
         YN = (YN + LAMDA) * inv4
@@ -304,7 +304,7 @@ function DRJ(X::A, Y::B, Z::C, P::D) where {A,B,C,D}
         ZNDEV = (MU - ZN) * invMU
         PNDEV = (MU - PN) * invMU
         EPSLON = max(abs(XNDEV), abs(YNDEV), abs(ZNDEV), abs(PNDEV))
-        EPSLON < ERRTOL && break
+        !(EPSLON >= ERRTOL) && break  # NaN-terminating, as in DRF
         XNROOT = _sqrt(XN)
         YNROOT = _sqrt(YN)
         ZNROOT = _sqrt(ZN)

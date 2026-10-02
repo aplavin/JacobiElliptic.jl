@@ -34,7 +34,7 @@ function _am(u::A, m::B, tol::C) where {A,B,C}
         scale *= 2
         @inbounds _ambuf = Base.setindex(_ambuf, c / a, n)
     end
-    abs(c) > tol && return T(NaN)
+    !(abs(c) <= tol) && return T(NaN)  # also NaN m, for which the loop above never runs
 
     phi = a * u * scale
     for i = n:-1:1
@@ -136,9 +136,7 @@ function cel(kc::A, p::B, a::C, b::D) where {A,B,C,D}
         p = g + p
         g = m
         m = kc + m
-        if abs(g - kc) < g * ca
-            break
-        end
+        !(abs(g - kc) >= g * ca) && break  # `!(≥)`: NaN terminates
         kc = twoT * √e
         e = kc * m
     end

@@ -3050,7 +3050,9 @@ function _Kscreen(m::T) where {T}
     )
 end
 
+# u = Inf (reached when K(m) is NaN, so no period reduction happened): NaN steps, so _ΔXNloop skips its loop and returns NaN
 @inline function _dup_steps(u::T) where {T}
+    isinf(u) && return T(NaN)
     return u > zero(T) ? max(6 + floor(log2(u)), one(T)) : zero(T)
 end
 

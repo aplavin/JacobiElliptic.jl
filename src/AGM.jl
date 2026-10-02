@@ -18,7 +18,7 @@ export K, E
 
     while true
         c = (a - b) / twoT
-        abs(c) < ERRTOL && break
+        !(abs(c) >= ERRTOL) && break  # `!(≥)`: NaN terminates
         next_a = (a + b) / twoT
         next_b = sqrt(a * b)
         sum_c2 = muladd(pow2, c * c, sum_c2)

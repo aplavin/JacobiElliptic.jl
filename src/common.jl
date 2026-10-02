@@ -1,50 +1,42 @@
 export am
 
-# Abramowitz & Stegun, section 16.4, p571
-#const _ambuf = Array{Float64}(undef, 10)
+# Max AGM steps: Float64 needs ≤ 9 even at m = prevfloat(1.0), Float32 ≤ 6; wider types more
+_am_maxsteps(::Type{<:Union{Float16,Float32,Float64}}) = 10
+_am_maxsteps(::Type) = 32
+
+# A&S 16.4: descending AGM for 0 ≤ m ≤ 1, absolute error O(eps·u) uniformly in m, so it is used up
+# to m → 1. No small-(1-m) asymptotic (A&S 16.15.4): its error grows like (1-m)·cosh(u), wrong for u ~ K(m).
 function _am(u::A, m::B, tol::C) where {A,B,C}
 
     T = promote_type(A, B, C)
 
     # Use an immutable local buffer so GPU backends can keep this in registers.
-    _ambuf = StaticArrays.@SVector[
-        zero(T),
-        zero(T),
-        zero(T),
-        zero(T),
-        zero(T),
-        zero(T),
-        zero(T),
-        zero(T),
-        zero(T),
-        zero(T),
-    ]
+    nmax = _am_maxsteps(T)
+    _ambuf = zero(StaticArrays.SVector{nmax,T})
     u == 0 && return zero(T)
 
     sqrt_tol = sqrt(tol)
     if m < sqrt_tol
-        # A&S 16.13.4
+        # A&S 16.13.4 (O(m²) remainder)
         return u - m * (u - sin(2 * u) / 2) / 4
     end
     m1 = one(T) - m
-    if m1 < sqrt_tol
-        # A&S 16.15.4
-        t = tanh(u)
-        return asin(t) + m1 * (t - u * (one(T) - t^2)) * cosh(u) / 4
-    end
+    # m = 1: am(u|1) = gd(u)
+    iszero(m1) && return asin(tanh(u))
 
     a = one(T)
     b = sqrt(m1)
     c = sqrt(m)
     n = 0
-    while abs(c) > tol && n < 10
+    scale = one(T)  # 2^n, accumulated exactly (no integer power: GPU-safe)
+    while abs(c) > tol && n < nmax
         a, b, c, n = ((a + b) / 2, sqrt(a * b), (a - b) / 2, n + 1)
+        scale *= 2
         @inbounds _ambuf = Base.setindex(_ambuf, c / a, n)
     end
     abs(c) > tol && return T(NaN)
 
-    #phi = ldexp(a*u, n) # Was slower on my benchmarks
-    phi = a * u * (2^n)
+    phi = a * u * scale
     for i = n:-1:1
         @inbounds phi = (phi + asin(_ambuf[i] * sin(phi))) / 2
     end

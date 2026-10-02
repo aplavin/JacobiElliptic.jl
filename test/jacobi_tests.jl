@@ -115,4 +115,21 @@
         @test JacobiElliptic.am(10.0, 1.1) ≈ -0.0038260319603258524
         @test JacobiElliptic.am(10.0, 10.0) ≈ -0.18538447091861052
     end
+
+    @testset "am near m = 1 vs 256-bit reference" begin
+        # am(u|m) from bisection + Newton on ArbNumerics.elliptic_f
+        for ((u, m), ref) in (
+            (20.0, 1 - 1e-10) => 1.576860869527043,
+            (15.0, 1 - 1e-9) => 1.571204342143267,
+            (12.0, 1 - 1e-8) => 1.5709874818544491,
+            (25.0, 0.999) => 7.8818237562111815,
+            (3.0, 0.3) => 2.7175782549216283,
+        )
+            @test JacobiElliptic.am(u, m) ≈ ref rtol = 4u * eps()
+        end
+        for ((u, m), ref) in ((10f0, 1 - 1f-5) => 1.5982737166354217, (6f0, 1 - 1f-4) => 1.5708812708993438)
+            @test JacobiElliptic.am(u, m) ≈ ref rtol = 4u * eps(1f0)
+        end
+        @test JacobiElliptic.am(big"0.5", big"0.99") isa BigFloat
+    end
 end

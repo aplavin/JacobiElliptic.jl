@@ -8,6 +8,7 @@ export ellipj, ellipke
 @inline function _sqrt(x::Union{Float32,Float64})
     return Core.Intrinsics.sqrt_llvm(x)
 end
+@inline _sqrt(x) = sqrt(x)  # generic fallback (e.g. BigFloat)
 
 include("jacobi.jl")
 include("slatec.jl")
@@ -313,11 +314,78 @@ end
 
 Π = Pi
 
-function ellipj(u, m)
-    phi = am(u, m)
-    s, c = sincos(phi)
-    d = _sqrt(muladd(-m, s * s, 1))
-    return (s, c, d)
+"""
+    ellipj(u, m) -> (sn, cn, dn)
+
+Jacobi elliptic functions `sn(u|m)`, `cn(u|m)`, `dn(u|m)` from a single amplitude evaluation.
+Valid for all real `m` (negative `m`: imaginary-modulus transformation, A&S 16.10; `m > 1`:
+reciprocal-modulus transformation, A&S 16.11).
+"""
+function ellipj(u::A, m::B) where {A,B}
+    T = float(promote_type(A, B))
+    u, m = T(u), T(m)
+    # Both transformations are scalar selects around one inlined 0 ≤ m ≤ 1 core (one copy of the
+    # AGM in GPU code). For m < 0 everything derives from the one rounded 1-μ = 1/(1-m), so the
+    # transformation is exact for a single slightly perturbed m.
+    neg = m < 0
+    gt1 = m > 1
+    # inverses taken of selected arguments: an unselected branch must stay finite (at m = 0, 1),
+    # else reverse-mode AD multiplies its zero cotangent by Inf
+    mcneg = inv(1 - ifelse(neg, m, zero(T)))
+    k = _sqrt(ifelse(neg, mcneg, ifelse(gt1, m, one(T))))
+    minv = inv(ifelse(gt1, m, one(T)))
+    s, c, d = _ellipj01(
+        ifelse(neg, u / k, k * u),
+        ifelse(neg, -m * mcneg, ifelse(gt1, minv, m)),
+        ifelse(neg, mcneg, ifelse(gt1, 1 - minv, 1 - m)),
+    )
+    invd = inv(d)
+    # m > 1: sn(u|m) = sn(√m u|1/m)/√m, cn(u|m) = dn(√m u|1/m), dn(u|m) = cn(√m u|1/m)
+    return (
+        ifelse(neg, k * s * invd, s / k),
+        ifelse(neg, c * invd, ifelse(gt1, d, c)),
+        ifelse(neg, invd, ifelse(gt1, c, d)),
+    )
+end
+
+# 0 ≤ m ≤ 1, mc = 1 - m (passed in so callers can supply it without rounding).
+# m > 1/2: the amplitude has absolute error O(eps·u), so cn = cos(am) (and sn, dn near their small
+# values) lose relative accuracy where am → π/2; near m = 1 that is the whole tail K/2 ≲ u ≲ 3K/2.
+# There the complementary argument Δ = K - u is used (A&S 16.8):
+#     sn(u) = cn(Δ)/dn(Δ),  cn(u) = √mc sn(Δ)/dn(Δ),  dn(u) = √mc/dn(Δ),
+# and dn = √(cn² + mc sn²), free of the cancellation in √(1 - m sn²) near m = 1.
+# The reductions u mod 4K, u - 2K, K - u are exact (fmod, Sterbenz) for the rounded K.
+@inline function _ellipj01(u::T, m::T, mc::T) where {T}
+    # m = 1: closed form keeps cn = dn = sech u relatively accurate where am → π/2
+    iszero(mc) && (c = inv(cosh(u)); return (tanh(u), c, c))
+    fold = mc < m
+    x = u
+    sgn_s = one(T)
+    sgn_sc = one(T)
+    comp = false
+    if fold
+        Km = K(m)
+        a = rem(abs(u), 4 * Km)                   # sn odd, cn/dn even in u
+        sgn_s = copysign(one(T), u)
+        if a >= 2 * Km                            # half-period shift: sn, cn → -sn, -cn
+            a -= 2 * Km
+            sgn_sc = -sgn_sc
+        end
+        if a > 3 * Km / 2                         # [3K/2, 2K) → (-K/2, 0]
+            a -= 2 * Km
+            sgn_sc = -sgn_sc
+        end
+        comp = abs(a) > Km / 2
+        x = comp ? Km - a : a
+    end
+    s, c = sincos(_am(x, m))
+    d = fold ? _sqrt(muladd(mc, s * s, c * c)) : _sqrt(muladd(-m, s * s, one(T)))
+    if comp
+        rt = _sqrt(mc)
+        invd = inv(d)
+        s, c, d = (c * invd, rt * s * invd, rt * invd)
+    end
+    return (sgn_s * sgn_sc * s, sgn_sc * c, d)
 end
 
 function _J(n, sinphi, m)

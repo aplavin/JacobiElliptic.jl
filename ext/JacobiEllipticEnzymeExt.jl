@@ -1051,6 +1051,133 @@ for alg in [JacobiElliptic.CarlsonAlg, JacobiElliptic.FukushimaAlg]
         return (dϕ, dm)
     end
 
+    #----------------------------------------------------------------------------------------
+    # Jacobi DN(ϕ, m)
+    #----------------------------------------------------------------------------------------
+
+    @eval function forward(
+        # https://enzymead.github.io/Enzyme.jl/stable/#Forward-mode
+        # Of note, when we seed both arguments at once the tangent return is the sum of both.
+        config::EnzymeRules.FwdConfig,
+        func::Const{typeof(($alg).dn)},
+        RT,
+        ϕ::Annotation{<:Real},
+        m::Annotation{<:Real},
+    )
+        s = ($alg).sn(ϕ.val, m.val)
+        a = ($alg).am(ϕ.val, m.val)
+        d = ($alg).dn(ϕ.val, m.val)
+        c = ($alg).cn(ϕ.val, m.val)
+        e = ($alg).E(a, m.val)
+        c_d = c / d
+        ∂dn_∂m(ϕ, m) = begin
+
+            _dn_parameter_derivative(e, c_d, ϕ, m, s, c, d)
+
+        end
+
+        ∂dn_∂ϕ = -m.val * s * c
+
+        if EnzymeRules.needs_primal(config) && EnzymeRules.needs_shadow(config)
+            if EnzymeRules.width(config) == 1
+                return Duplicated(
+                    func.val(ϕ.val, m.val),
+                    (ϕ isa Const ? zero(ϕ.val) : ∂dn_∂ϕ * ϕ.dval) +
+                    (m isa Const ? zero(m.val) : ∂dn_∂m(ϕ.val, m.val) * m.dval),
+                )
+            else
+                return BatchDuplicated(
+                    func.val(ϕ.val, m.val),
+                    ntuple(
+                        i ->
+                            (ϕ isa Const ? zero(ϕ.val) : ∂dn_∂ϕ * ϕ.dval[i]) +
+                            (m isa Const ? zero(m.val) : ∂dn_∂m(ϕ.val, m.val) * m.dval[i]),
+                        Val(EnzymeRules.width(config)),
+                    ),
+                )
+            end
+        elseif EnzymeRules.needs_shadow(config)
+            if EnzymeRules.width(config) == 1
+                return (ϕ isa Const ? zero(ϕ.val) : ∂dn_∂ϕ * ϕ.dval) +
+                       (m isa Const ? zero(m.val) : ∂dn_∂m(ϕ.val, m.val) * m.dval)
+
+            else
+                return ntuple(
+                    i ->
+                        (ϕ isa Const ? zero(ϕ.val) : ∂dn_∂ϕ * ϕ.dval[i]) +
+                        (m isa Const ? zero(m.val) : ∂dn_∂m(ϕ.val, m.val) * m.dval[i]),
+                    Val(EnzymeRules.width(config)),
+                )
+
+            end
+        elseif EnzymeRules.needs_primal(config)
+            return func.val(ϕ.val, m.val)
+        else
+            return nothing
+        end
+    end
+
+    @eval function augmented_primal(
+        config::RevConfigWidth,
+        func::Const{typeof(($alg).dn)},
+        ::Type,
+        ϕ::Annotation{<:Real},
+        m::Annotation{<:Real},
+    )
+        c = ($alg).cn(ϕ.val, m.val)
+        s = ($alg).sn(ϕ.val, m.val)
+        d = func.val(ϕ.val, m.val)
+        e = ($alg).E(($alg).am(ϕ.val, m.val), m.val)
+        primal = EnzymeRules.needs_primal(config) ? d : nothing
+        return EnzymeRules.AugmentedReturn(primal, nothing, (s, d, c, e))
+    end
+
+    @eval function reverse(
+        config::RevConfigWidth,
+        func::Const{typeof(($alg).dn)},
+        dret,
+        tape,
+        ϕ::Annotation{T},
+        m::Annotation{T},
+    ) where {T}
+        s, d, c, e = tape
+        ∂dn_∂m = _dn_parameter_derivative(e, c/d, ϕ.val, m.val, s, c, d)
+        ∂dn_∂ϕ = -m.val * s * c
+
+        dϕ = if ϕ isa Const
+            nothing
+        elseif EnzymeRules.width(config) == 1
+            if dret isa Type{<:Const}
+                zero(ϕ.val)
+            else
+                ∂dn_∂ϕ * dret.val
+            end
+        else
+            if dret isa Type{<:Const}
+                ntuple(i -> zero(ϕ.val), Val(EnzymeRules.width(config)))
+            else
+                ntuple(i -> ∂dn_∂ϕ * dret.val[i], Val(EnzymeRules.width(config)))
+            end
+        end
+
+        dm = if m isa Const
+            nothing
+        elseif EnzymeRules.width(config) == 1
+            if dret isa Type{<:Const}
+                zero(m.val)
+            else
+                ∂dn_∂m * dret.val
+            end
+        else
+            if dret isa Type{<:Const}
+                ntuple(i -> zero(m.val), Val(EnzymeRules.width(config)))
+            else
+                ntuple(i -> ∂dn_∂m * dret.val[i], Val(EnzymeRules.width(config)))
+            end
+        end
+        return (dϕ, dm)
+    end
+
 
     #----------------------------------------------------------------------------------------
     # Jacobi SN(ϕ, m)

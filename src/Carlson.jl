@@ -25,7 +25,7 @@ end
     oneT = _one(T)
     sinphi2 = sinphi * sinphi
     drf, ierr = DRF(oneT - sinphi2, muladd(-m, sinphi2, oneT), oneT)
-    @assert ierr == 0
+    ierr == 0 || return T(NaN)
     sinphi * drf
 end
 
@@ -104,7 +104,7 @@ function K(m::T) where {T}
     else
         # 0 ≤ m < 1
         drf, ierr = DRF(_zero(T), oneT - m, _one(T))
-        @assert ierr == 0
+        ierr == 0 || return T(NaN)
         return drf
     end
 end
@@ -207,7 +207,7 @@ function ellipke(m::T) where {T}
         y = oneT - m
         drf, ierr1 = DRF(_zero(T), y, _one(T))
         drd, ierr2 = DRD(_zero(T), y, _one(T))
-        @assert ierr1 == 0 && ierr2 == 0
+        (ierr1 == 0 && ierr2 == 0) || return (T(NaN), T(NaN))
         return (drf, muladd(-m * inv3, drd, drf))
     end
 end

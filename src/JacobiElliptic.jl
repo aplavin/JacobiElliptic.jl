@@ -71,6 +71,7 @@ E(m) = ArithmeticGeometricMeanAlg.E(m)
 
 ellipj(u, m) = CarlsonAlg.ellipj(u, m)
 ellipj(::Carlson, u, m) = CarlsonAlg.ellipj(u, m)
+ellipj(u, m, K) = CarlsonAlg.ellipj(u, m, K)
 
 asn = FukushimaAlg.asn
 acn = FukushimaAlg.acn

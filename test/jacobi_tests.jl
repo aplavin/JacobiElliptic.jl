@@ -154,4 +154,16 @@
         @inferred ellipj(0.3f0, 0.5f0)
         @inferred ellipj(1, 0.5)
     end
+
+    @testset "ellipj(u, m, K)" begin
+        CK = JacobiElliptic.CarlsonAlg.K
+        for T in (Float64, Float32), m in T.((0.0, 0.3, 0.6, 0.9, 1 - 1e-6, 1.0)), u in T.((-7.3, 0.4, 2.5, 25.0))
+            @test ellipj(u, m, CK(m)) === ellipj(u, m)
+        end
+        for m in (-0.5, -3.0, -10.0), u in (-7.3, 0.4, 2.5, 25.0)
+            @test all(isapprox.(ellipj(u, m, CK(m)), ellipj(u, m); atol = 100u * eps()))
+        end
+        @test all(isnan, ellipj(0.3, 2.0, 1.0))
+        @inferred ellipj(0.3f0, 0.9f0, CK(0.9f0))
+    end
 end

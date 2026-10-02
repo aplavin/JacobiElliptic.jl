@@ -321,7 +321,21 @@ Jacobi elliptic functions `sn(u|m)`, `cn(u|m)`, `dn(u|m)` from a single amplitud
 Valid for all real `m` (negative `m`: imaginary-modulus transformation, A&S 16.10; `m > 1`:
 reciprocal-modulus transformation, A&S 16.11).
 """
-function ellipj(u::A, m::B) where {A,B}
+ellipj(u, m) = _ellipj(u, m, nothing)
+
+"""
+    ellipj(u, m, K) -> (sn, cn, dn)
+
+`ellipj(u, m)` for `m ≤ 1` given `K = K(m)`, for callers that already hold it (e.g. a fixed modulus): the quarter-period
+reduction for `m > 1/2` then needs no elliptic integral. `m > 1` gives NaN.
+"""
+function ellipj(u, m, K)
+    s, c, d = _ellipj(u, m, K)
+    bad = m > 1
+    (ifelse(bad, oftype(s, NaN), s), ifelse(bad, oftype(c, NaN), c), ifelse(bad, oftype(d, NaN), d))
+end
+
+@inline function _ellipj(u::A, m::B, Kin) where {A,B}
     T = float(promote_type(A, B))
     u, m = T(u), T(m)
     # Both transformations are scalar selects around one inlined 0 ≤ m ≤ 1 core (one copy of the
@@ -338,6 +352,7 @@ function ellipj(u::A, m::B) where {A,B}
         ifelse(neg, u / k, k * u),
         ifelse(neg, -m * mcneg, ifelse(gt1, minv, m)),
         ifelse(neg, mcneg, ifelse(gt1, 1 - minv, 1 - m)),
+        _core_K(Kin, neg, gt1, k),
     )
     invd = inv(d)
     # m > 1: sn(u|m) = sn(√m u|1/m)/√m, cn(u|m) = dn(√m u|1/m), dn(u|m) = cn(√m u|1/m)
@@ -355,7 +370,13 @@ end
 #     sn(u) = cn(Δ)/dn(Δ),  cn(u) = √mc sn(Δ)/dn(Δ),  dn(u) = √mc/dn(Δ),
 # and dn = √(cn² + mc sn²), free of the cancellation in √(1 - m sn²) near m = 1.
 # The reductions u mod 4K, u - 2K, K - u are exact (fmod, Sterbenz) for the rounded K.
-@inline function _ellipj01(u::T, m::T, mc::T) where {T}
+# K of the core's parameter from the caller's K(m): m < 0 → K(-m/(1-m)) = √(1-m)·K(m) = K(m)/k (A&S 17.4.17)
+@inline _core_K(::Nothing, neg, gt1, k) = nothing
+@inline _core_K(K, neg, gt1, k) = ifelse(neg, K / k, oftype(k, K))
+_Kof(::Nothing, m) = K(m)
+_Kof(Km, m) = Km
+
+@inline function _ellipj01(u::T, m::T, mc::T, Kin = nothing) where {T}
     # m = 1: closed form keeps cn = dn = sech u relatively accurate where am → π/2
     iszero(mc) && (c = inv(cosh(u)); return (tanh(u), c, c))
     fold = mc < m
@@ -364,7 +385,7 @@ end
     sgn_sc = one(T)
     comp = false
     if fold
-        Km = K(m)
+        Km = _Kof(Kin, m)
         a = rem(abs(u), 4 * Km)                   # sn odd, cn/dn even in u
         sgn_s = copysign(one(T), u)
         if a >= 2 * Km                            # half-period shift: sn, cn → -sn, -cn

@@ -6,27 +6,14 @@ sn(u, m) = ellipj(u, m)[1]
 cn(u, m) = ellipj(u, m)[2]
 dn(u, m) = ellipj(u, m)[3]
 
-xn = ((:s, :(sn(u, m))), (:c, :(cn(u, m))), (:d, :(dn(u, m))), (:n, :(1)))
-for (p, num) in xn, (q, den) in xn
+# pq(u, m) = p(u, m) / q(u, m) with n ≡ 1, from a single ellipj evaluation
+xn = ((:s, 1), (:c, 2), (:d, 3), (:n, 0))
+for (p, i) in xn, (q, j) in xn
     f = Symbol(p, q)
-    #@eval begin
-    #    """
-    #        $($f)(u::Real, m::Real)
-
-    #    Compute the Jacobi elliptic function $($f)(u | m)
-    #    """
-    #    ($f)(u::Real, m::Real) = ($f)(Float64(u), Float64(m))
-    #end
-
-    if (p == q)
-        @eval ($f)(::A, ::B) where {A,B} = begin
-            one(promote_type(A, B))
-        end
-    elseif (q != :n)
-        @eval ($f)(u::A, m::B) where {A,B} = begin
-            ($num) / ($den)
-        end
+    if p == q
+        @eval ($f)(::A, ::B) where {A,B} = one(promote_type(A, B))
+    elseif q != :n
+        @eval ($f)(u, m) = (scd = ellipj(u, m); $(i == 0 ? :(inv(scd[$j])) : :(scd[$i] / scd[$j])))
     end
 end
 
-#end # module

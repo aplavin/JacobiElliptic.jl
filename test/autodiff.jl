@@ -654,3 +654,22 @@ end
 
 
 end
+
+@testset "Compound Jacobi functions: AD through one ellipj" begin
+    # (f, u, m) => (∂u, ∂m), from 320-bit central differences
+    cases = (
+        (sc, 0.7, 0.6) => (1.4256085950753163, -0.08269578419852487),
+        (sc, 0.7, 0.3) => (1.5630260295597418, -0.08555479958803455),
+        (sc, 0.7, -0.5) => (1.9756967350591599, -0.09403792397717559),
+        (sc, 0.7, 1.5) => (1.0605795280966972, -0.07500396123804864),
+        (nd, 0.7, 0.6) => (0.37957964435635083, 0.2632631074000977),
+        (nd, 2.5, 0.95) => (1.517868320964544, 26.442561122276885),
+    )
+    for ((f, u, m), (gu, gm)) in cases
+        @test ForwardDiff.gradient(x -> f(x[1], x[2]), [u, m]) ≈ [gu, gm] rtol = 1e-12
+        @test collect(Zygote.gradient(f, u, m)) ≈ [gu, gm] rtol = 1e-12
+        @test collect(Enzyme.autodiff(Reverse, f, Active, Active(u), Active(m))[1]) ≈ [gu, gm] rtol = 1e-12
+        @test Enzyme.autodiff(Forward, f, Duplicated(u, 1.0), Const(m))[1] ≈ gu rtol = 1e-12
+        @test Enzyme.autodiff(Forward, f, Const(u), Duplicated(m, 1.0))[1] ≈ gm rtol = 1e-12
+    end
+end

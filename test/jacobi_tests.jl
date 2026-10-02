@@ -166,4 +166,63 @@
         @test all(isnan, ellipj(0.3, 2.0, 1.0))
         @inferred ellipj(0.3f0, 0.9f0, CK(0.9f0))
     end
+
+    @testset "ellipj_add" begin
+        # chain of 1000 steps vs direct evaluation
+        for m in (0.3, 0.9, 1 - 1e-8, 1.0, -2.0), Δu in (0.01, 0.37)
+            step = ellipj(Δu, m)
+            j = foldl((j, _) -> ellipj_add(j, step, m), 1:1000; init = ellipj(0.0, m))
+            @test all(map((x, r) -> isapprox(x, r; atol = 1e-11), j, ellipj(1000Δu, m)))
+        end
+        @test ellipj_add(ellipj(0.4f0, 0.7f0), ellipj(0.3f0, 0.7f0), 0.7f0) isa NTuple{3,Float32}
+        @test all(isapprox.(ellipj_add(ellipj(0.4f0, 0.7f0), ellipj(0.3f0, 0.7f0), 0.7f0), ellipj(0.7f0, 0.7f0); rtol = 4eps(1f0)))
+        # m > 1: dn changes sign, not supported
+        @test all(isapprox.(ellipj_add(ellipj(0.5, 3.0), ellipj(0.61, 3.0), 3.0)[1:2], ellipj(1.11, 3.0)[1:2]; rtol = 1e-14))
+        @test isnan(ellipj_add(ellipj(0.5, 3.0), ellipj(0.61, 3.0), 3.0)[3])
+    end
+
+    @testset "ellipj_add: long chains vs 128-bit references" begin
+        # Direct high-precision evaluations, not another addition-formula chain;
+        # m < 0 maps onto 0 < m < 1 (A&S 16.10), m = 0 and m = 1 in closed form.
+        function reference(u, m)
+            u, m = BigFloat(u), BigFloat(m)
+            if m < 0
+                scale = sqrt(1 - m)
+                s, c, d = reference(u * scale, m / (m - 1))
+                return (s / (scale * d), c / d, inv(d))
+            end
+            s, c = m == 0 ? (sin(u), cos(u)) : m == 1 ? (tanh(u), sech(u)) : (sn(u, m), cn(u, m))
+            (s, c, sqrt(c * c + (1 - m) * s * s))
+        end
+
+        # 128 bits exceeds Float64 precision
+        setprecision(BigFloat, 128) do
+            for T in (Float32, Float64), m in T.((-10, -0.5, 0, 0.5, 0.99, prevfloat(one(T)), 1)), direction in (-1, 1)
+                u, Δu = T(0.25), T(direction / 256)
+                state = T.(reference(u, m))
+                delta = T.(reference(Δu, m))
+                @test (@inferred ellipj_add(state, delta, m)) isa NTuple{3,T}
+                max_error = max_norm_error = max_dn_relative_error = 0.0
+                for i in 1:2048
+                    state = ellipj_add(state, delta, m)
+                    ref = reference(BigFloat(u) + i * BigFloat(Δu), m)
+                    max_error = max(max_error, maximum(abs.(Float64.(state) .- Float64.(ref))))
+                    max_norm_error = max(max_norm_error, abs(Float64(state[1])^2 + Float64(state[2])^2 - 1))
+                    max_dn_relative_error = max(max_dn_relative_error, Float64(abs(state[3] / ref[3] - 1)))
+                end
+                @test max_error < (T === Float32 ? 3e-5 : 5e-13)
+                @test max_norm_error < 4eps(T)
+                @test max_dn_relative_error < (T === Float32 ? 1e-4 : 1e-11)
+            end
+
+            # sn rounds to one at m = 1, u = 10 in Float32, but cn and dn are still nonzero.
+            # A reconstruction using 1 - m sn² would spuriously erase dn here.
+            for m in (prevfloat(1f0), 1f0)
+                ref = reference(10, m)
+                advanced = ellipj_add(Float32.(ref), (0f0, 1f0, 1f0), m)
+                @test advanced[3] > 0
+                @test advanced[3] ≈ Float32(ref[3]) rtol = 4eps(Float32)
+            end
+        end
+    end
 end

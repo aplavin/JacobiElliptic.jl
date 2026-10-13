@@ -962,7 +962,7 @@ function K(m::T) where {T}
         t = -log(qd) * (kdm * T(ONE_DIV_PI))
     end
     # Complete the transformation mentioned above for m < 0:
-    flag && return t / sqrt(one(T) - m)
+    flag && return t / √(one(T) - m)
 
     return t
 end
@@ -1762,12 +1762,12 @@ function E(m::T) where {T}
         edm = poly12(td)
         km = K(x)
 
-        #// To avoid precision loss near 1, we use Eq. 33 from Fukushima (2009):
+        # // To avoid precision loss near 1, we use Eq. 33 from Fukushima (2009):
         t = (T(π / 2) + (km * (kdm - edm))) / kdm
     end
 
-    #// Complete the transformation mentioned above for m < 0:
-    flag && return t * sqrt(one(T) - m)
+    # // Complete the transformation mentioned above for m < 0:
+    flag && return t * √(one(T) - m)
 
     return t
 end
@@ -1777,7 +1777,7 @@ end
 # (https://doi.org/T(10).1007/s00211-010-0321-8)
 ############################################################################
 function serf(y::A, m::B) where {A,B}
-    #Maclaurin series of asn(s,m)/s in y=s^2: coefficient of y^l*m^k is Binomial[2(l-k),l-k]*Binomial[2k,k]/(4^l*(2l+1))
+    # Maclaurin series of asn(s,m)/s in y=s^2: coefficient of y^l*m^k is Binomial[2(l-k),l-k]*Binomial[2k,k]/(4^l*(2l+1))
     T = promote_type(A, B)
     return 1 +
            y * (
@@ -1973,7 +1973,7 @@ end
     c = √(oneT - sinφ2)
     x = c * c
     d2 = muladd(m, x, mc)
-    #z = c/√(mc+m*c*c)
+    # z = c/√(mc+m*c*c)
     x < yS * d2 && return *(K(m) - asn(c / √(d2), m))
 
     v = mc * (oneT - x)
@@ -2003,10 +2003,9 @@ end
 function F(φ::A, m::B) where {A,B}
     T = promote_type(A, B)
     oneT = one(T)
-    (isnan(φ) || isnan(m)) && return T(NaN)
     if m > 1
         ## Abramowitz & Stegum*(17.4.15)
-        m12 = sqrt(m)
+        m12 = √(m)
         theta = asin(m12 * sin(φ))
         signθ = sign(theta)
         absθ = abs(theta)
@@ -2015,7 +2014,7 @@ function F(φ::A, m::B) where {A,B}
         # Abramowitz & Stegum*(17.4.17)
         n = -m
         one_plus_n = oneT + n
-        m12 = inv(sqrt(one_plus_n))
+        m12 = inv(√(one_plus_n))
         m1m = n / one_plus_n
         newφ = T(π / 2) - φ
         signφ = sign(newφ)
@@ -2142,7 +2141,7 @@ end
 
 function Ds(s::A, m::B) where {A,B}
     T = promote_type(A, B)
-    #Pre-allocate with SVector to avoid GPU allocations
+    # Pre-allocate with SVector to avoid GPU allocations
     _ybuf = StaticArrays.@MVector[
         zero(T),
         zero(T),
@@ -2172,7 +2171,7 @@ function Ds(s::A, m::B) where {A,B}
         yi = yi / ((1 + ci) * (1 + di))
     end
 
-    D0 = Dsi(sqrt(yi), m)
+    D0 = Dsi(√(yi), m)
     I == zero(T) && return D0
     Di = D0
 
@@ -2209,7 +2208,7 @@ function rawD(φ::A, m::B) where {A,B}
         return Ds(s, m)
     end
 
-    return D(m) - Ds(sqrt(one(T) - w^2), m) - √((one(T) - c^2) * (one(T) - w^2))
+    return D(m) - Ds(√(one(T) - w^2), m) - √((one(T) - c^2) * (one(T) - w^2))
 end
 
 # https://www.sciencedirect.com/science/article/pii/S0377042711001270?ref=pdf_download&fr=RR-2&rr=80442ff79ecc4cef
@@ -2232,18 +2231,18 @@ function D(φ::A, m::B) where {A,B}
 
     φ < zero(T) && return -D(-φ, m)
 
-    #Reduction of Parameter
+    # Reduction of Parameter
     if m > one(T) && m * sin(φ)^2 ≤ one(T)
         mr = inv(m)
         φr = asin(√m * sin(φ))
         return mr * √mr * D(φr, mr)
     end
 
-    #if m < zero(T)
+    # if m < zero(T)
     #	mN = -m / (1 - m)
     #	φN = asin(√(mc / (1 - m * sin(φ)^2)) * sin(φ))
     #	return √(1 - mN) * (D(φN, mN) - sin(φN) * cos(φN) / √(1 - mN * sin(φN)^2))
-    #end
+    # end
 
 
     return rawD(φ, m)
@@ -2267,16 +2266,15 @@ end
 #----------------------------------------------------------------------------------------
 Π(n, m) = Pi(n, m)
 Π(n, φ, m) = Pi(n, φ, m)
-#https://doi.org/T(10).1016/j.cam.2011.1107
+# https://doi.org/T(10).1016/j.cam.2011.1107
 
 function Pi(n::A, m::B) where {A,B}
     T = promote_type(A, B)
     oneT = one(T)
     zeroT = zero(T)
-    (isnan(n) || isnan(m)) && return T(NaN)
-    m > oneT && return T(NaN) #Complex Branch
-    n > oneT && return K(m) - Pi(m / n, m) #Cauchy principal value
-    n == oneT && return T(Inf) #1/(1 - n*sin(θ)^2) pole at θ = π/2
+    m > oneT && return T(NaN) # Complex Branch
+    n > oneT && return K(m) - Pi(m / n, m) # Cauchy principal value
+    n == oneT && return T(Inf) # 1/(1 - n*sin(θ)^2) pole at θ = π/2
     n == zeroT && return K(m)
     m == oneT && return T(Inf)
     kc = √(oneT - m)
@@ -2288,36 +2286,34 @@ function Pi(n::A, φ::B, m::C) where {A,B,C}
     T = promote_type(A, B, C)
     oneT = one(T)
 
-    (isnan(n) || isnan(φ) || isnan(m)) && return T(NaN)
-
-    if m < 0 # Imaginary modulus transformation https://dlmf.nist.gov/19.7#iii
-        if n == m #the transformation below is 0/0 at n == m, so use the closed form
+    if m < 0 # Imaginary modulus transformation https://dlmf.nist.gov/19.7# iii
+        if n == m # the transformation below is 0/0 at n == m, so use the closed form
             sinφ, cosφ = sincos(φ)
-            return (E(φ, m) - m * sinφ * cosφ / sqrt(muladd(-m, sinφ * sinφ, oneT))) /
+            return (E(φ, m) - m * sinφ * cosφ / √(muladd(-m, sinφ * sinφ, oneT))) /
                    (oneT - m)
         end
-        #the transformation goes through asin, which folds |φ| > π/2 onto the principal
-        #branch, so reduce first with Π(n; φ + kπ | m) = Π(n; φ | m) + 2k Π(n | m)
+        # the transformation goes through asin, which folds |φ| > π/2 onto the principal
+        # branch, so reduce first with Π(n; φ + kπ | m) = Π(n; φ | m) + 2k Π(n | m)
         if 2abs(φ) > T(π)
-            phi2 = φ + T(π / 2)
-            return 2fld(phi2, T(π)) * Pi(n, m) + Pi(n, mod(phi2, T(π)) - T(π / 2), m)
+            φ2 = φ + T(π / 2)
+            return 2fld(φ2, T(π)) * Pi(n, m) + Pi(n, mod(φ2, T(π)) - T(π / 2), m)
         end
         mc = oneT - m
         imc = inv(mc)
         mN = -m * imc
         sinφ = sin(φ)
         sinφ2 = sinφ * sinφ
-        φN = asin(sqrt(mc / muladd(-m, sinφ2, oneT)) * sinφ)
+        φN = asin(√(mc / muladd(-m, sinφ2, oneT)) * sinφ)
 
         nN = (n - m) * imc
 
-        return sqrt(imc) / nN * (mN * F(φN, mN) + imc * n * Pi(nN, φN, mN))
+        return √(imc) / nN * (mN * F(φN, mN) + imc * n * Pi(nN, φN, mN))
     end # https://link.springer.com/book/10.1007/978-3-642-65138-0 117.01
     if n > 1
         nc = oneT - n
         sinφ, cosφ = sincos(φ)
         sinφ2 = sinφ * sinφ
-        t1 = sinφ / (cosφ * sqrt(muladd(-m, sinφ2, oneT)))
+        t1 = sinφ / (cosφ * √(muladd(-m, sinφ2, oneT)))
         h1 = nc * (n−m) / n
         n1 = m / n
         return (FukushimaT(t1, h1) - n1 * J(n1, φ, m))
@@ -2330,7 +2326,7 @@ function Pi(n::A, φ::B, m::C) where {A,B,C}
         else
             sinφ, cosφ = sincos(φ)
             sinφ2 = sinφ * sinφ
-            sqrt_term = sqrt(muladd(-m, sinφ2, oneT))
+            sqrt_term = √(muladd(-m, sinφ2, oneT))
             return F(φ, m) + (-E(φ, m) + sqrt_term * sinφ / cosφ) / (oneT - m)
         end
     elseif n == 0
@@ -2352,7 +2348,7 @@ Returns the associate incomplete elliptic integral of the third kind.
 - `φ` : Amplitude
 - `m` : Elliptic parameter
 """
-function J(n::A, φ::B, m::C) where {A,B,C} #Appendix A
+function J(n::A, φ::B, m::C) where {A,B,C} # Appendix A
     T = promote_type(A, B, C)
     oneT = one(T)
     # Reduction of Amplitude
@@ -2394,13 +2390,13 @@ function J(n::A, φ::B, m::C) where {A,B,C} #Appendix A
         φR = asin(√m * sin(φ))
         nR = n / m
         mR = inv(m)
-        #return NaN
+        # return NaN
         return mR * √mR * J(nR, φR, mR)
     elseif m < zero(T)
         mc = oneT - m
         sinφ = sin(φ)
         sinφ2 = sinφ * sinφ
-        φN = asin(sqrt(mc / muladd(-m, sinφ2, oneT)) * sinφ)
+        φN = asin(√(mc / muladd(-m, sinφ2, oneT)) * sinφ)
         nN = (n−m) / mc
         mN = -m / mc
         return mN * √mN * J(nN, φN, mN)
@@ -2409,7 +2405,7 @@ function J(n::A, φ::B, m::C) where {A,B,C} #Appendix A
     if zero(T) < φ < oneT && zero(T) < m < oneT
         sinφ, cosφ = sincos(φ)
         sinφ2 = sinφ * sinφ
-        sqrt_term = sqrt(muladd(-m, sinφ2, oneT))
+        sqrt_term = √(muladd(-m, sinφ2, oneT))
         if n > one(T)
             # t = inv(x^2)
             # h = y - x
@@ -2424,7 +2420,7 @@ function J(n::A, φ::B, m::C) where {A,B,C} #Appendix A
             t2 = sinφ * cosφ / sqrt_term
             h2 = -n * (m - n) / nc
             n2 = (m−n) / nc
-            #return NaN
+            # return NaN
             return (F(φ, m) - FukushimaT(t2, h2) - (mc / nc) * J(n2, φ, m)) / nc
         end
     end
@@ -2456,7 +2452,7 @@ function rawJ(n::A, φ::B, m::C) where {A,B,C}
     elseif c < w
         return Js(n, s, m)
     else
-        return J(n, m) - Js(n, sqrt(one(T) - w^2), m) - FukushimaT(tc, h)
+        return J(n, m) - Js(n, √(one(T) - w^2), m) - FukushimaT(tc, h)
     end
 end
 
@@ -2478,8 +2474,8 @@ function J(n::A, m::B) where {A,B}
     return cel(kc, nc, zero(T), one(T))
 end
 
-#function Jc(n::T, c::T, m::T) where{T}
-#    #_ybuf = @SVector [zero(T),zero(T),zero(T),zero(T),zero(T),zero(T),zero(T),zero(T),zero(T),zero(T)]#
+# function Jc(n::T, c::T, m::T) where{T}
+#    # _ybuf = @SVector [zero(T),zero(T),zero(T),zero(T),zero(T),zero(T),zero(T),zero(T),zero(T),zero(T)]#
 #    _xbuf = @SVector [zero(T),zero(T),zero(T),zero(T),zero(T),zero(T),zero(T),zero(T),zero(T),zero(T)]#
 #
 #    nc = one(T) - n
@@ -2497,7 +2493,7 @@ end
 #            break
 #        end
 #        I += 1
-#        #@set! _ybuf[I] = one(T) - xi
+#        # @set! _ybuf[I] = one(T) - xi
 #        @set! _xbuf[I] = xi
 #        ci = √xi
 #        di = √(mc+m*xi)
@@ -2509,15 +2505,15 @@ end
 #    yi = one(T) - xi 
 #    ti = 0
 #    for i in I:-1:1
-#        #yim1 = _ybuf[i]
-#        #sim1 = √yim1
-#        #cim1 = √(one(T)-yim1)
-#        #dim1 = √(one(T)-m*yim1)
+#        # yim1 = _ybuf[i]
+#        # sim1 = √yim1
+#        # cim1 = √(one(T)-yim1)
+#        # dim1 = √(one(T)-m*yim1)
 #        
-#        #ti = sim1*yi / (one(T)-n*(yim1 - cim1*dim1*yi))
-#        #Ji = 2Ji + FukushimaT(ti, h)
+#        # ti = sim1*yi / (one(T)-n*(yim1 - cim1*dim1*yi))
+#        # Ji = 2Ji + FukushimaT(ti, h)
 #
-#        #yi = yim1
+#        # yi = yim1
 #
 #        xim1 = _xbuf[i]
 #        yim1 = one(T) - xim1
@@ -2525,7 +2521,7 @@ end
 #        cim12 = (xim1)
 #        dim12 = (one(T)-m*yim1)
 #        
-#        ti = sim1*yi / (one(T)-n*(yim1 - sqrt(cim1*dim1)*yi))
+#        ti = sim1*yi / (one(T)-n*(yim1 - √(cim1*dim1)*yi))
 #        Ji = 2Ji + FukushimaT(ti, h)
 #
 #        xi = xim1
@@ -2533,11 +2529,11 @@ end
 #    end
 #    return Ji
 #
-#end
+# end
 
 function Js(n::A, s::B, m::C) where {A,B,C}
     T = promote_type(A, B, C)
-    #Pre-allocate with SVector to avoid GPU allocations
+    # Pre-allocate with SVector to avoid GPU allocations
     _ybuf = StaticArrays.@MVector[
         zero(T),
         zero(T),
@@ -2592,8 +2588,8 @@ end
 
 function JsI(n::A, y::B, m::C) where {A,B,C}
     T = promote_type(A, B, C)
-    #Series[(EllipticPi[n, ArcSin[s], m] − EllipticF[ArcSin[s], m])/n, {s, zero(T), 19}]
-    return sqrt(y) *
+    # Series[(EllipticPi[n, ArcSin[s], m] − EllipticF[ArcSin[s], m])/n, {s, zero(T), 19}]
+    return √(y) *
            y *
            (
                T(0.3333333333333333) +
@@ -3047,8 +3043,8 @@ function JsI(n::A, y::B, m::C) where {A,B,C}
                )
            )
 end
-#https://doi-org.ezp-prod1.hul.harvard.edu/T(10).031007/s10569-008-9177-y
-#https://link.springer.com/article/T(10).1007/s10569-008-9177-y
+# https://doi-org.ezp-prod1.hul.harvard.edu/T(10).031007/s10569-008-9177-y
+# https://link.springer.com/article/T(10).1007/s10569-008-9177-y
 
 function cel2(kc::A, a::B, b::C) where {A,B,C}
     T = promote_type(A, B, C)

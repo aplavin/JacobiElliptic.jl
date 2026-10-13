@@ -186,10 +186,10 @@ end
 
 
 for alg in (CarlsonAlg, FukushimaAlg)
-    ke_val = isdefined(alg, :ellipke) ? :(($alg).ellipke(m.val)) :
-             :((($alg).K(m.val), ($alg).E(m.val)))
-    ke_m = isdefined(alg, :ellipke) ? :(($alg).ellipke(m)) :
-           :((($alg).K(m), ($alg).E(m)))
+    ke_val =
+        isdefined(alg, :ellipke) ? :(($alg).ellipke(m.val)) :
+        :((($alg).K(m.val), ($alg).E(m.val)))
+    ke_m = isdefined(alg, :ellipke) ? :(($alg).ellipke(m)) : :((($alg).K(m), ($alg).E(m)))
     #----------------------------------------------------------------------------------------
     # Elliptic K(m)
     #----------------------------------------------------------------------------------------
